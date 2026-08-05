@@ -1,0 +1,221 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Get a free hosted Postgres database in seconds: `npx create-db`
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Company {
+  id         String      @id @default(cuid())
+  name       String
+  address    String?
+  phone      String?
+  createdAt  DateTime    @default(now())
+  updatedAt  DateTime    @updatedAt
+
+  users        User[]
+  products     Product[]
+  categories   Category[]
+  clients      Client[]
+  suppliers    Supplier[]
+  sales        Sale[]
+  stockEntries StockEntry[]
+  stockExits   StockExit[]
+}
+
+model User {
+  id           String   @id @default(cuid())
+  companyId    String
+  name         String
+  email        String   @unique
+  phone        String?
+  passwordHash String
+  role         Role     @default(SELLER)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  company      Company  @relation(fields: [companyId], references: [id])
+
+sales        Sale[]
+stockEntries StockEntry[]
+stockExits   StockExit[]
+  
+}
+
+enum Role {
+  OWNER
+  SELLER
+}
+
+
+model Category {
+  id        String    @id @default(cuid())
+  companyId String
+  name      String
+  createdAt DateTime  @default(now())
+
+  company   Company   @relation(fields: [companyId], references: [id])
+  products  Product[]
+}
+
+model Product {
+  id         String   @id @default(cuid())
+  companyId  String
+  categoryId String?
+  name       String
+  code       String?
+  sellPrice  Decimal  @db.Decimal(10, 2)
+  costPrice  Decimal  @db.Decimal(10, 2)
+  stock      Int      @default(0)
+  unit       String   @default("unite")
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  company    Company   @relation(fields: [companyId], references: [id])
+  category   Category? @relation(fields: [categoryId], references: [id])
+
+saleItems       SaleItem[]
+stockEntryItems StockEntryItem[]
+stockExitItems  StockExitItem[]
+}
+
+
+
+model Client {
+  id        String   @id @default(cuid())
+  companyId String
+  name      String
+  phone     String?
+  email     String?
+  createdAt DateTime @default(now())
+
+  company   Company  @relation(fields: [companyId], references: [id])
+  sales     Sale[]
+}
+
+model Supplier {
+  id           String       @id @default(cuid())
+  companyId    String
+  name         String
+  phone        String?
+  email        String?
+  createdAt    DateTime     @default(now())
+
+  company      Company      @relation(fields: [companyId], references: [id])
+  stockEntries StockEntry[]
+}
+
+model Sale {
+  id          String     @id @default(cuid())
+  companyId   String
+  userId      String
+  clientId    String?
+  reference   String     @unique
+  status      SaleStatus @default(PENDING)
+  paymentMode String     @default("Especes")
+  subtotal    Decimal    @db.Decimal(10, 2)
+  discount    Decimal    @default(0) @db.Decimal(10, 2)
+  delivery    Decimal    @default(0) @db.Decimal(10, 2)
+  total       Decimal    @db.Decimal(10, 2)
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  company     Company    @relation(fields: [companyId], references: [id])
+  user        User       @relation(fields: [userId], references: [id])
+  client      Client?    @relation(fields: [clientId], references: [id])
+  items       SaleItem[]
+}
+
+enum SaleStatus {
+  PENDING
+  COMPLETED
+  CANCELLED
+}
+
+model SaleItem {
+  id        String  @id @default(cuid())
+  saleId    String
+  productId String
+  quantity  Int
+  unitPrice Decimal @db.Decimal(10, 2)
+  subtotal  Decimal @db.Decimal(10, 2)
+
+  sale      Sale    @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  product   Product @relation(fields: [productId], references: [id])
+}
+
+model StockEntry {
+  id         String           @id @default(cuid())
+  companyId  String
+  userId     String
+  supplierId String?
+  reference  String           @unique
+  invoiceNum String?
+  status     StockEntryStatus @default(PENDING)
+  total      Decimal          @db.Decimal(10, 2)
+  date       DateTime         @default(now())
+  createdAt  DateTime         @default(now())
+
+  company    Company          @relation(fields: [companyId], references: [id])
+  user       User             @relation(fields: [userId], references: [id])
+  supplier   Supplier?        @relation(fields: [supplierId], references: [id])
+  items      StockEntryItem[]
+}
+
+enum StockEntryStatus {
+  PENDING
+  COMPLETED
+  CANCELLED
+}
+
+model StockEntryItem {
+  id           String     @id @default(cuid())
+  stockEntryId String
+  productId    String
+  quantity     Int
+  unitPrice    Decimal    @db.Decimal(10, 2)
+  subtotal     Decimal    @db.Decimal(10, 2)
+
+  stockEntry   StockEntry @relation(fields: [stockEntryId], references: [id], onDelete: Cascade)
+  product      Product    @relation(fields: [productId], references: [id])
+}
+
+model StockExit {
+  id        String        @id @default(cuid())
+  companyId String
+  userId    String
+  reference String        @unique
+  type      StockExitType
+  reason    String?
+  date      DateTime      @default(now())
+  createdAt DateTime      @default(now())
+
+  company   Company       @relation(fields: [companyId], references: [id])
+  user      User          @relation(fields: [userId], references: [id])
+  items     StockExitItem[]
+}
+
+enum StockExitType {
+  SALE
+  LOSS
+  OTHER
+}
+
+model StockExitItem {
+  id          String    @id @default(cuid())
+  stockExitId String
+  productId   String
+  quantity    Int
+  unitPrice   Decimal   @db.Decimal(10, 2)
+  subtotal    Decimal   @db.Decimal(10, 2)
+
+  stockExit   StockExit @relation(fields: [stockExitId], references: [id], onDelete: Cascade)
+  product     Product   @relation(fields: [productId], references: [id])
+}
