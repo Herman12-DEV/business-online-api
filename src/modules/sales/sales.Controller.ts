@@ -1,17 +1,21 @@
-import { Controller, Get, Post, Body, Param, UseGuards, Request } from '@nestjs/common';
+import { Controller, Get, Post, Body, Param, Patch, UseGuards, Request } from '@nestjs/common';
 import { SalesService } from './sales.service';
 import { CreateSaleDto } from './dto/create-sale.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
+import { IsEnum } from 'class-validator';
 
-@UseGuards(JwtAuthGuard)  // toutes les routes de ce controller sont protégées
+class UpdateStatusDto {
+  @IsEnum(['PENDING', 'COMPLETED', 'CANCELLED'])
+  status: 'PENDING' | 'COMPLETED' | 'CANCELLED' = "PENDING";
+}
+
+@UseGuards(JwtAuthGuard)
 @Controller('sales')
 export class SalesController {
   constructor(private salesService: SalesService) {}
 
   @Get()
   findAll(@Request() req: any) {
-    // req.user contient les infos du token JWT
-    // dont req.user.companyId
     return this.salesService.findAll(req.user.companyId);
   }
 
@@ -23,5 +27,14 @@ export class SalesController {
   @Get(':id')
   findOne(@Request() req: any, @Param('id') id: string) {
     return this.salesService.findOne(req.user.companyId, id);
+  }
+
+  @Patch(':id/status')
+  updateStatus(
+    @Request() req: any,
+    @Param('id') id: string,
+    @Body() dto: UpdateStatusDto,
+  ) {
+    return this.salesService.updateStatus(req.user.companyId, id, dto.status);
   }
 }

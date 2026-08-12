@@ -116,4 +116,53 @@ export class SalesService {
       },
     });
   }
+
+  async updateStatus(companyId: string, id: string, status: 'PENDING' | 'COMPLETED' | 'CANCELLED') {
+  const sale = await this.prisma.sale.findFirst({
+    where: { id, companyId },
+    include: { items: true },
+  });
+
+  if (!sale) throw new Error('Vente introuvable');
+
+  // Si on passe de PENDING à COMPLETED → diminue le stock
+  if (sale.status === 'PENDING' && status === 'COMPLETED') {
+    await this.prisma.$transaction(async (tx) => {
+      await tx.sale.update({
+        where: { id },
+        data: { status },
+      });
+      for (const item of sale.items) {
+        await tx.product.update({
+          where: { id: item.productId },
+          data: { stock: { decrement: item.quantity } },
+        });
+      }
+    });
+    return;
+  }
+
+  // Si on annule une vente COMPLETED → remet le stock
+  if (sale.status === 'COMPLETED' && status === 'CANCELLED') {
+    await this.prisma.$transaction(async (tx) => {
+      await tx.sale.update({
+        where: { id },
+        data: { status },
+      });
+      for (const item of sale.items) {
+        await tx.product.update({
+          where: { id: item.productId },
+          data: { stock: { increment: item.quantity } },
+        });
+      }
+    });
+    return;
+  }
+
+  // Autres changements de statut
+  await this.prisma.sale.update({
+    where: { id },
+    data: { status },
+  });
+}
 }
