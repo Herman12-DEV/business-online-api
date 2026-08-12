@@ -1,4 +1,4 @@
-import { IsString, IsOptional, IsArray, IsNumber, Min, ValidateNested } from 'class-validator';
+import { IsString, IsOptional, IsArray, IsNumber, Min, ValidateNested, IsEnum } from 'class-validator';
 import { Type } from 'class-transformer';
 
 class SaleItemDto {
@@ -21,7 +21,15 @@ export class CreateSaleDto {
 
   @IsOptional()
   @IsString()
+  clientName?: string;
+
+  @IsOptional()
+  @IsString()
   paymentMode?: string;
+
+  @IsOptional()
+  @IsEnum(['PENDING', 'COMPLETED', 'CANCELLED'])
+  status?: 'PENDING' | 'COMPLETED' | 'CANCELLED';
 
   @IsOptional()
   @IsNumber()

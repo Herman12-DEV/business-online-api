@@ -6,7 +6,6 @@ import { CreateSaleDto } from './dto/create-sale.dto';
 export class SalesService {
   constructor(private prisma: PrismaService) {}
 
-  // Génère une référence unique : VTE-2024-0001
   private async generateReference(companyId: string): Promise<string> {
     const count = await this.prisma.sale.count({ where: { companyId } });
     const year = new Date().getFullYear();
@@ -14,23 +13,25 @@ export class SalesService {
     return `VTE-${year}-${number}`;
   }
 
-  async findAll(companyId: string, status?: string) {
+  async findAll(companyId: string) {
     return this.prisma.sale.findMany({
-      where: {
-        companyId,
-        ...(status ? { status: status as any } : {}),
-      },
+      where: { companyId },
       include: {
         client: true,
         user: { select: { name: true } },
-        items: { include: { product: true } },
+        items: {
+          include: {
+            product: {
+              select: { name: true, imageUrl: true },
+            },
+          },
+        },
       },
       orderBy: { createdAt: 'desc' },
     });
   }
 
   async create(companyId: string, userId: string, dto: CreateSaleDto) {
-    // Calcule les montants
     const subtotal = dto.items.reduce(
       (sum, item) => sum + item.unitPrice * item.quantity,
       0,
@@ -38,24 +39,33 @@ export class SalesService {
     const discount = dto.discount ?? 0;
     const delivery = dto.delivery ?? 0;
     const total = subtotal - discount + delivery;
-
     const reference = await this.generateReference(companyId);
 
-    // Transaction : crée la vente + met à jour le stock
+    // Si clientName fourni, crée le client à la volée
+    let clientId = dto.clientId;
+    if (!clientId && dto.clientName) {
+      const client = await this.prisma.client.create({
+        data: {
+          companyId,
+          name: dto.clientName,
+        },
+      });
+      clientId = client.id;
+    }
+
     return this.prisma.$transaction(async (tx) => {
-      // 1. Crée la vente avec ses items
       const sale = await tx.sale.create({
         data: {
           companyId,
           userId,
-          clientId: dto.clientId,
+          clientId,
           reference,
           paymentMode: dto.paymentMode ?? 'Especes',
           subtotal,
           discount,
           delivery,
           total,
-          status: 'COMPLETED',
+          status: dto.status ?? 'COMPLETED',
           items: {
             create: dto.items.map((item) => ({
               productId: item.productId,
@@ -65,15 +75,25 @@ export class SalesService {
             })),
           },
         },
-        include: { items: true },
+        include: {
+          items: {
+            include: {
+              product: {
+                select: { name: true, imageUrl: true },
+              },
+            },
+          },
+        },
       });
 
-      // 2. Diminue le stock pour chaque produit vendu
-      for (const item of dto.items) {
-        await tx.product.update({
-          where: { id: item.productId },
-          data: { stock: { decrement: item.quantity } },
-        });
+      // Diminue le stock seulement si la vente est COMPLETED
+      if ((dto.status ?? 'COMPLETED') === 'COMPLETED') {
+        for (const item of dto.items) {
+          await tx.product.update({
+            where: { id: item.productId },
+            data: { stock: { decrement: item.quantity } },
+          });
+        }
       }
 
       return sale;
@@ -86,7 +106,13 @@ export class SalesService {
       include: {
         client: true,
         user: { select: { name: true } },
-        items: { include: { product: true } },
+        items: {
+          include: {
+            product: {
+              select: { name: true, imageUrl: true },
+            },
+          },
+        },
       },
     });
   }
