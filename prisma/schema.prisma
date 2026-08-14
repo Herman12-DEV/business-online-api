@@ -40,6 +40,7 @@ model User {
   role         Role     @default(SELLER)
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
+  avatarUrl  String?
 
   company      Company  @relation(fields: [companyId], references: [id])
 
