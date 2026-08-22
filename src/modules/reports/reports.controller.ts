@@ -1,4 +1,4 @@
-import { Controller, Get, UseGuards, Request } from '@nestjs/common';
+import { Controller, Get, Query, UseGuards, Request } from '@nestjs/common';
 import { ReportsService } from './reports.service';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 
@@ -15,5 +15,19 @@ export class ReportsController {
   @Get('profit-loss')
   getProfitLoss(@Request() req: any) {
     return this.reportsService.getProfitLoss(req.user.companyId);
+  }
+
+  // Nouvel endpoint détaillé
+  @Get('sales/detailed')
+  getSalesReportDetailed(
+    @Request() req: any,
+    @Query('period') period: string = 'month',
+  ) {
+    const validPeriods = ['today', 'week', 'month', 'quarter', 'year'];
+    const safePeriod = validPeriods.includes(period) ? period : 'month';
+    return this.reportsService.getSalesReportDetailed(
+      req.user.companyId,
+      safePeriod as any,
+    );
   }
 }
