@@ -17,6 +17,7 @@ export class ReportsController {
     return this.reportsService.getProfitLoss(req.user.companyId);
   }
 
+  // Nouvel endpoint détaillé
   @Get('sales/detailed')
   getSalesReportDetailed(
     @Request() req: any,
@@ -24,16 +25,9 @@ export class ReportsController {
   ) {
     const validPeriods = ['today', 'week', 'month', 'quarter', 'year'];
     const safePeriod = validPeriods.includes(period) ? period : 'month';
-    return this.reportsService.getSalesReportDetailed(req.user.companyId, safePeriod as any);
-  }
-
-  @Get('profit-loss/detailed')
-  getProfitLossDetailed(
-    @Request() req: any,
-    @Query('period') period: string = 'month',
-  ) {
-    const validPeriods = ['today', 'week', 'month', 'quarter', 'year'];
-    const safePeriod = validPeriods.includes(period) ? period : 'month';
-    return this.reportsService.getProfitLossDetailed(req.user.companyId, safePeriod as any);
+    return this.reportsService.getSalesReportDetailed(
+      req.user.companyId,
+      safePeriod as any,
+    );
   }
 }

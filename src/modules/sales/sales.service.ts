@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CreateSaleDto } from './dto/create-sale.dto';
 
@@ -52,6 +52,32 @@ export class SalesService {
       });
       clientId = client.id;
     }
+
+
+            // Vérifie le stock disponible pour chaque produit
+        if ((dto.status ?? 'COMPLETED') === 'COMPLETED') {
+          for (const item of dto.items) {
+            const product = await this.prisma.product.findUnique({
+              where: { id: item.productId },
+              select: { name: true, stock: true },
+            });
+
+            if (!product) {
+              throw new Error(`Produit introuvable`);
+            }
+
+            if (product.stock < item.quantity) {
+              throw new Error(
+                `Stock insuffisant pour "${product.name}". Stock disponible : ${product.stock}, quantité demandée : ${item.quantity}`
+              );
+            }
+          }
+        }
+
+
+
+
+
 
     return this.prisma.$transaction(async (tx) => {
       const sale = await tx.sale.create({
@@ -123,7 +149,7 @@ export class SalesService {
     include: { items: true },
   });
 
-  if (!sale) throw new Error('Vente introuvable');
+  if (!sale) throw new NotFoundException('Vente introuvable');
 
   // Si on passe de PENDING à COMPLETED → diminue le stock
   if (sale.status === 'PENDING' && status === 'COMPLETED') {
