@@ -41,43 +41,34 @@ export class SalesService {
     const total = subtotal - discount + delivery;
     const reference = await this.generateReference(companyId);
 
-    // Si clientName fourni, crée le client à la volée
+    // Crée le client à la volée si nom fourni
     let clientId = dto.clientId;
     if (!clientId && dto.clientName) {
       const client = await this.prisma.client.create({
-        data: {
-          companyId,
-          name: dto.clientName,
-        },
+        data: { companyId, name: dto.clientName },
       });
       clientId = client.id;
     }
 
+    // Vérifie le stock disponible pour chaque produit
+    if ((dto.status ?? 'COMPLETED') === 'COMPLETED') {
+      for (const item of dto.items) {
+        const product = await this.prisma.product.findUnique({
+          where: { id: item.productId },
+          select: { name: true, stock: true },
+        });
 
-            // Vérifie le stock disponible pour chaque produit
-        if ((dto.status ?? 'COMPLETED') === 'COMPLETED') {
-          for (const item of dto.items) {
-            const product = await this.prisma.product.findUnique({
-              where: { id: item.productId },
-              select: { name: true, stock: true },
-            });
-
-            if (!product) {
-              throw new BadRequestException(`Produit introuvable`);
-            }
-
-            if (product.stock < item.quantity) {
-              throw new BadRequestException(
-                `Stock insuffisant pour "${product.name}". Disponible : ${product.stock}, demandé : ${item.quantity}`
-              );
-            }
-          }
+        if (!product) {
+          throw new BadRequestException(`Produit introuvable`);
         }
 
-
-
-
-
+        if (product.stock < item.quantity) {
+          throw new BadRequestException(
+            `Stock insuffisant pour "${product.name}". Disponible : ${product.stock}, demandé : ${item.quantity}`
+          );
+        }
+      }
+    }
 
     return this.prisma.$transaction(async (tx) => {
       const sale = await tx.sale.create({
@@ -112,7 +103,7 @@ export class SalesService {
         },
       });
 
-      // Diminue le stock seulement si la vente est COMPLETED
+      // Diminue le stock seulement si COMPLETED
       if ((dto.status ?? 'COMPLETED') === 'COMPLETED') {
         for (const item of dto.items) {
           await tx.product.update({
@@ -143,72 +134,59 @@ export class SalesService {
     });
   }
 
-  async updateStatus(companyId: string, id: string, status: 'PENDING' | 'COMPLETED' | 'CANCELLED') {
-  const sale = await this.prisma.sale.findFirst({
-    where: { id, companyId },
-    include: { items: true },
-  });
-
-  if (sale.status === 'PENDING' && status === 'COMPLETED') {
-  // Vérifie le stock avant de compléter
-  for (const item of sale.items) {
-    const product = await this.prisma.product.findUnique({
-      where: { id: item.productId },
-      select: { name: true, stock: true },
+  async updateStatus(
+    companyId: string,
+    id: string,
+    status: 'PENDING' | 'COMPLETED' | 'CANCELLED',
+  ) {
+    const sale = await this.prisma.sale.findFirst({
+      where: { id, companyId },
+      include: { items: true },
     });
-    if (product && product.stock < item.quantity) {
-      throw new BadRequestException(
-        `Stock insuffisant pour "${product.name}". Disponible : ${product.stock}, demandé : ${item.quantity}`
-      );
+
+    if (!sale) throw new NotFoundException('Vente introuvable');
+
+    // PENDING → COMPLETED : vérifie le stock puis diminue
+    if (sale.status === 'PENDING' && status === 'COMPLETED') {
+      for (const item of sale.items) {
+        const product = await this.prisma.product.findUnique({
+          where: { id: item.productId },
+          select: { name: true, stock: true },
+        });
+        if (product && product.stock < item.quantity) {
+          throw new BadRequestException(
+            `Stock insuffisant pour "${product.name}". Disponible : ${product.stock}, demandé : ${item.quantity}`
+          );
+        }
+      }
+
+      await this.prisma.$transaction(async (tx) => {
+        await tx.sale.update({ where: { id }, data: { status } });
+        for (const item of sale.items) {
+          await tx.product.update({
+            where: { id: item.productId },
+            data: { stock: { decrement: item.quantity } },
+          });
+        }
+      });
+      return;
     }
-  }
-  // ... reste du code
-}
 
-
-
-
-
-  if (!sale) throw new NotFoundException('Vente introuvable');
-
-  // Si on passe de PENDING à COMPLETED → diminue le stock
-  if (sale.status === 'PENDING' && status === 'COMPLETED') {
-    await this.prisma.$transaction(async (tx) => {
-      await tx.sale.update({
-        where: { id },
-        data: { status },
+    // COMPLETED → CANCELLED : remet le stock
+    if (sale.status === 'COMPLETED' && status === 'CANCELLED') {
+      await this.prisma.$transaction(async (tx) => {
+        await tx.sale.update({ where: { id }, data: { status } });
+        for (const item of sale.items) {
+          await tx.product.update({
+            where: { id: item.productId },
+            data: { stock: { increment: item.quantity } },
+          });
+        }
       });
-      for (const item of sale.items) {
-        await tx.product.update({
-          where: { id: item.productId },
-          data: { stock: { decrement: item.quantity } },
-        });
-      }
-    });
-    return;
-  }
+      return;
+    }
 
-  // Si on annule une vente COMPLETED → remet le stock
-  if (sale.status === 'COMPLETED' && status === 'CANCELLED') {
-    await this.prisma.$transaction(async (tx) => {
-      await tx.sale.update({
-        where: { id },
-        data: { status },
-      });
-      for (const item of sale.items) {
-        await tx.product.update({
-          where: { id: item.productId },
-          data: { stock: { increment: item.quantity } },
-        });
-      }
-    });
-    return;
+    // Autres transitions
+    await this.prisma.sale.update({ where: { id }, data: { status } });
   }
-
-  // Autres changements de statut
-  await this.prisma.sale.update({
-    where: { id },
-    data: { status },
-  });
-}
 }
