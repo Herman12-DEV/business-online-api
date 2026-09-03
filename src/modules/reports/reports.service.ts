@@ -323,4 +323,88 @@ export class ReportsService {
       insight,
     };
   }
+   
+  async getProfitLossDetailed(companyId: string, period: Period) {
+  const { start, end } = this.getPeriodRange(period);
+  const { start: prevStart, end: prevEnd } = this.getPreviousPeriodRange(period);
+
+  const [currentSalesAgg, currentEntriesAgg, currentSales] = await Promise.all([
+    this.prisma.sale.aggregate({
+      where: { companyId, status: 'COMPLETED', createdAt: { gte: start, lte: end } },
+      _sum: { total: true },
+      _count: true,
+    }),
+    this.prisma.stockEntry.aggregate({
+      where: { companyId, status: 'COMPLETED', createdAt: { gte: start, lte: end } },
+      _sum: { total: true },
+    }),
+    this.prisma.sale.findMany({
+      where: { companyId, status: 'COMPLETED', createdAt: { gte: start, lte: end } },
+      select: { createdAt: true, total: true, subtotal: true },
+    }),
+  ]);
+
+  const [prevSalesAgg, prevEntriesAgg] = await Promise.all([
+    this.prisma.sale.aggregate({
+      where: { companyId, status: 'COMPLETED', createdAt: { gte: prevStart, lte: prevEnd } },
+      _sum: { total: true },
+    }),
+    this.prisma.stockEntry.aggregate({
+      where: { companyId, status: 'COMPLETED', createdAt: { gte: prevStart, lte: prevEnd } },
+      _sum: { total: true },
+    }),
+  ]);
+
+  const currentRevenue = Number(currentSalesAgg._sum.total ?? 0);
+  const currentCosts = Number(currentEntriesAgg._sum.total ?? 0);
+  const currentProfit = currentRevenue - currentCosts;
+
+  const previousRevenue = Number(prevSalesAgg._sum.total ?? 0);
+  const previousCosts = Number(prevEntriesAgg._sum.total ?? 0);
+  const previousProfit = previousRevenue - previousCosts;
+
+  let profitTrend: number | null = null;
+  if (previousProfit !== 0) {
+    profitTrend = ((currentProfit - previousProfit) / Math.abs(previousProfit)) * 100;
+  } else if (currentProfit > 0) {
+    profitTrend = 100;
+  }
+
+  const margin = currentRevenue > 0 ? (currentProfit / currentRevenue) * 100 : 0;
+  const chartData = this.buildChartData(currentSales, period);
+
+  let insight: string | null = null;
+  if (currentSalesAgg._count > 0) {
+    if (profitTrend !== null && Math.abs(profitTrend) > 1) {
+      insight = profitTrend > 0
+        ? `Ton bénéfice progresse de ${profitTrend.toFixed(1)} % par rapport à la période précédente.`
+        : `Ton bénéfice est en baisse de ${Math.abs(profitTrend).toFixed(1)} % par rapport à la période précédente.`;
+    } else if (margin > 30) {
+      insight = `Ta marge bénéficiaire est de ${margin.toFixed(0)} %. C'est une bonne performance.`;
+    } else if (margin > 0) {
+      insight = `Ta marge bénéficiaire est de ${margin.toFixed(0)} % sur cette période.`;
+    } else if (currentProfit < 0) {
+      insight = `Tes coûts dépassent ton chiffre d'affaires. Analyse tes entrées de stock.`;
+    }
+  }
+
+  return {
+    period,
+    current: {
+      revenue: currentRevenue,
+      costs: currentCosts,
+      profit: currentProfit,
+      isProfit: currentProfit >= 0,
+      margin: Math.round(margin * 10) / 10,
+      salesCount: currentSalesAgg._count,
+    },
+    previous: { revenue: previousRevenue, costs: previousCosts, profit: previousProfit },
+    profitTrend: profitTrend !== null ? Math.round(profitTrend * 10) / 10 : null,
+    chartData,
+    insight,
+  };
+}
+
+
+
 }
