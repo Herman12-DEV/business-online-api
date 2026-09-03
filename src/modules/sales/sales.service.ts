@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CreateSaleDto } from './dto/create-sale.dto';
 
@@ -63,12 +63,12 @@ export class SalesService {
             });
 
             if (!product) {
-              throw new Error(`Produit introuvable`);
+              throw new BadRequestException(`Produit introuvable`);
             }
 
             if (product.stock < item.quantity) {
-              throw new Error(
-                `Stock insuffisant pour "${product.name}". Stock disponible : ${product.stock}, quantité demandée : ${item.quantity}`
+              throw new BadRequestException(
+                `Stock insuffisant pour "${product.name}". Disponible : ${product.stock}, demandé : ${item.quantity}`
               );
             }
           }
@@ -148,6 +148,26 @@ export class SalesService {
     where: { id, companyId },
     include: { items: true },
   });
+
+  if (sale.status === 'PENDING' && status === 'COMPLETED') {
+  // Vérifie le stock avant de compléter
+  for (const item of sale.items) {
+    const product = await this.prisma.product.findUnique({
+      where: { id: item.productId },
+      select: { name: true, stock: true },
+    });
+    if (product && product.stock < item.quantity) {
+      throw new BadRequestException(
+        `Stock insuffisant pour "${product.name}". Disponible : ${product.stock}, demandé : ${item.quantity}`
+      );
+    }
+  }
+  // ... reste du code
+}
+
+
+
+
 
   if (!sale) throw new NotFoundException('Vente introuvable');
 
