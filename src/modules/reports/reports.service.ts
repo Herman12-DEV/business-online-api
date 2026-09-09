@@ -209,6 +209,44 @@ export class ReportsService {
     return { revenue, costs, profit, isProfit: profit >= 0 };
   }
 
+  async getStockEntriesReport(companyId: string, period: Period) {
+    const { start, end } = this.getPeriodRange(period);
+
+    const entries = await this.prisma.stockEntry.findMany({
+      where: {
+        companyId,
+        status: 'COMPLETED',
+        createdAt: { gte: start, lte: end },
+      },
+      include: {
+        supplier: { select: { id: true, name: true } },
+        items: {
+          include: {
+            product: { select: { id: true, name: true, unit: true } },
+          },
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    return entries.map((entry) => ({
+      id: entry.id,
+      reference: entry.reference,
+      invoiceNum: entry.invoiceNum,
+      status: entry.status,
+      date: entry.date,
+      total: Number(entry.total),
+      supplier: entry.supplier,
+      items: entry.items.map((item) => ({
+        id: item.id,
+        quantity: item.quantity,
+        unitPrice: Number(item.unitPrice),
+        subtotal: Number(item.subtotal),
+        product: item.product,
+      })),
+    }));
+  }
+
   // ─── Nouvel endpoint détaillé ────────────────────────────
 
   async getSalesReportDetailed(companyId: string, period: Period) {

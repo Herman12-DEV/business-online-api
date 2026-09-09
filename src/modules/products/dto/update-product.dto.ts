@@ -1,6 +1,5 @@
 import { IsString, IsNumber, IsOptional, Min } from 'class-validator';
 
-// ⚠️ Pas de champ "stock" ici : il ne change que via ventes/entrées/sorties
 export class UpdateProductDto {
   @IsOptional()
   @IsString()
@@ -19,6 +18,11 @@ export class UpdateProductDto {
   @IsNumber()
   @Min(0)
   costPrice?: number;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  stock?: number;
 
   @IsOptional()
   @IsString()

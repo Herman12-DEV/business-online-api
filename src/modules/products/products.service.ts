@@ -57,10 +57,10 @@ export class ProductsService {
         ...(dto.code !== undefined && { code: dto.code }),
         ...(dto.sellPrice !== undefined && { sellPrice: dto.sellPrice }),
         ...(dto.costPrice !== undefined && { costPrice: dto.costPrice }),
+        ...(dto.stock !== undefined && { stock: dto.stock }),
         ...(dto.unit !== undefined && { unit: dto.unit }),
         ...(dto.categoryId !== undefined && { categoryId: dto.categoryId }),
         ...(dto.imageUrl !== undefined && { imageUrl: dto.imageUrl }),
-        // ⚠️ Stock volontairement absent — règle ERP
       },
     });
   }

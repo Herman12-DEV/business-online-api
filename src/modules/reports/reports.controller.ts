@@ -17,6 +17,16 @@ export class ReportsController {
     return this.reportsService.getProfitLoss(req.user.companyId);
   }
 
+  @Get('entries')
+  getStockEntriesReport(
+    @Request() req: any,
+    @Query('period') period: string = 'month',
+  ) {
+    const validPeriods = ['today', 'week', 'month', 'quarter', 'year'];
+    const safePeriod = validPeriods.includes(period) ? period : 'month';
+    return this.reportsService.getStockEntriesReport(req.user.companyId, safePeriod as any);
+  }
+
   // Nouvel endpoint détaillé
   @Get('sales/detailed')
   getSalesReportDetailed(
