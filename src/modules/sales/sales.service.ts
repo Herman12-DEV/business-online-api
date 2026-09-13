@@ -50,18 +50,21 @@ export class SalesService {
       clientId = client.id;
     }
 
-    // Vérifie le stock disponible pour chaque produit
-    if ((dto.status ?? 'COMPLETED') === 'COMPLETED') {
-      for (const item of dto.items) {
-        const product = await this.prisma.product.findUnique({
-          where: { id: item.productId },
-          select: { name: true, stock: true },
-        });
+    const productCosts = new Map<string, number>();
+    for (const item of dto.items) {
+      const product = await this.prisma.product.findUnique({
+        where: { id: item.productId },
+        select: { name: true, stock: true, costPrice: true },
+      });
 
-        if (!product) {
-          throw new BadRequestException(`Produit introuvable`);
-        }
+      if (!product) {
+        throw new BadRequestException(`Produit introuvable`);
+      }
 
+      productCosts.set(item.productId, Number(product.costPrice));
+
+      // Vérifie le stock disponible pour chaque produit vendu immédiatement.
+      if ((dto.status ?? 'COMPLETED') === 'COMPLETED') {
         if (product.stock < item.quantity) {
           throw new BadRequestException(
             `Stock insuffisant pour "${product.name}". Disponible : ${product.stock}, demandé : ${item.quantity}`
@@ -88,6 +91,7 @@ export class SalesService {
               productId: item.productId,
               quantity: item.quantity,
               unitPrice: item.unitPrice,
+              costPrice: productCosts.get(item.productId) ?? 0,
               subtotal: item.unitPrice * item.quantity,
             })),
           },

@@ -8,6 +8,7 @@ import {
   Param,
   UseGuards,
   Request,
+  Query,
 } from '@nestjs/common';
 import { ProductsService } from './products.service';
 import { CreateProductDto } from './dto/create-product.dto';
@@ -20,8 +21,8 @@ export class ProductsController {
   constructor(private productsService: ProductsService) {}
 
   @Get()
-  findAll(@Request() req: any) {
-    return this.productsService.findAll(req.user.companyId);
+  findAll(@Request() req: any, @Query('barcode') barcode?: string) {
+    return this.productsService.findAll(req.user.companyId, barcode);
   }
 
   @Post()

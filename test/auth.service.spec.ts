@@ -8,7 +8,7 @@ import { prismaMock, resetPrismaMock } from './prisma.mock';
 
 // Mock bcrypt
 jest.mock('bcryptjs');
-const mockedBcrypt = bcrypt as jest.Mocked<typeof bcrypt>;
+const mockedBcrypt = bcrypt as any;
 
 describe('AuthService', () => {
   let service: AuthService;

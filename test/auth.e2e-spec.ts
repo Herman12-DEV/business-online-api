@@ -19,7 +19,7 @@ jest.mock('bcryptjs', () => ({
 }));
 
 import * as bcrypt from 'bcryptjs';
-const mockedBcrypt = bcrypt as jest.Mocked<typeof bcrypt>;
+const mockedBcrypt = bcrypt as any;
 
 describe('Auth & Security (e2e)', () => {
   let app: INestApplication<App>;

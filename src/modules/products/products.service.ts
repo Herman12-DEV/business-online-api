@@ -11,9 +11,12 @@ import { UpdateProductDto } from './dto/update-product.dto';
 export class ProductsService {
   constructor(private prisma: PrismaService) {}
 
-  async findAll(companyId: string) {
+  async findAll(companyId: string, barcode?: string) {
     return this.prisma.product.findMany({
-      where: { companyId },
+      where: {
+        companyId,
+        ...(barcode ? { code: barcode } : {}),
+      },
       include: { category: true },
       orderBy: { createdAt: 'desc' },
     });
@@ -32,6 +35,13 @@ export class ProductsService {
         categoryId: dto.categoryId,
         imageUrl: dto.imageUrl,
       },
+    });
+  }
+
+  async findByBarcode(companyId: string, barcode: string) {
+    return this.prisma.product.findFirst({
+      where: { companyId, code: barcode },
+      include: { category: true },
     });
   }
 

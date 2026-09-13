@@ -7,10 +7,12 @@ import { PrismaService } from '../src/prisma/prisma.service';
 
 export type DeepMock<T> = {
   [P in keyof T]: T[P] extends (...args: any[]) => any
-    ? jest.Mock<ReturnType<T[P]>, Parameters<T[P]>>
+    ? jest.Mock<any, any>
     : T[P] extends Promise<any>
-      ? jest.Mock<ReturnType<T[P]>, Parameters<T[P]>>
-      : DeepMock<T[P]>;
+      ? jest.Mock<any, any>
+      : T[P] extends object
+        ? DeepMock<T[P]>
+        : T[P];
 };
 
 const createPrismaMock = (): DeepMock<PrismaService> => {
@@ -118,7 +120,6 @@ const createPrismaMock = (): DeepMock<PrismaService> => {
       count: jest.fn(),
     },
   } as any;
-  };
   return mock;
 };
 

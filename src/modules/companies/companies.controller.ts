@@ -1,4 +1,4 @@
-import { Controller, Patch, Param, Body, UseGuards, Request, ForbiddenException } from '@nestjs/common';
+import { Controller, Get, Patch, Param, Body, UseGuards, Request, ForbiddenException, NotFoundException } from '@nestjs/common';
 import { IsString, IsOptional, MaxLength, MinLength } from 'class-validator';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -25,6 +25,16 @@ class UpdateCompanyDto {
 @Controller('companies')
 export class CompaniesController {
   constructor(private prisma: PrismaService) {}
+
+  @Get(':id')
+  async findOne(@Request() req: any, @Param('id') id: string) {
+    if (req.user.companyId !== id) {
+      throw new ForbiddenException('Vous ne pouvez consulter que votre propre entreprise');
+    }
+    const company = await this.prisma.company.findUnique({ where: { id } });
+    if (!company) throw new NotFoundException('Entreprise introuvable');
+    return company;
+  }
 
   @Patch(':id')
   async update(

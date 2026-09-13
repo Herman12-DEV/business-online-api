@@ -152,6 +152,20 @@ export class ReportsService {
     return this.getPeriodRange('month');
   }
 
+  private calculateCostOfGoodsSold(
+    sales: { items: { quantity: number; costPrice: any }[] }[],
+  ): number {
+    return sales.reduce(
+      (salesTotal, sale) =>
+        salesTotal +
+        sale.items.reduce(
+          (itemsTotal, item) => itemsTotal + item.quantity * Number(item.costPrice),
+          0,
+        ),
+      0,
+    );
+  }
+
   async getSalesReport(companyId: string) {
     const { start, end } = this.getCurrentMonthRange();
 
@@ -192,21 +206,23 @@ export class ReportsService {
   async getProfitLoss(companyId: string) {
     const { start, end } = this.getCurrentMonthRange();
 
-    const sales = await this.prisma.sale.aggregate({
-      where: { companyId, status: 'COMPLETED', createdAt: { gte: start, lte: end } },
-      _sum: { total: true },
-    });
+    const [sales, entries] = await Promise.all([
+      this.prisma.sale.findMany({
+        where: { companyId, status: 'COMPLETED', createdAt: { gte: start, lte: end } },
+        select: { total: true, items: { select: { quantity: true, costPrice: true } } },
+      }),
+      this.prisma.stockEntry.aggregate({
+        where: { companyId, status: 'COMPLETED', createdAt: { gte: start, lte: end } },
+        _sum: { total: true },
+      }),
+    ]);
 
-    const entries = await this.prisma.stockEntry.aggregate({
-      where: { companyId, status: 'COMPLETED', createdAt: { gte: start, lte: end } },
-      _sum: { total: true },
-    });
-
-    const revenue = Number(sales._sum.total ?? 0);
-    const costs = Number(entries._sum.total ?? 0);
+    const revenue = sales.reduce((sum, sale) => sum + Number(sale.total), 0);
+    const costs = this.calculateCostOfGoodsSold(sales);
+    const expenses = Number(entries._sum.total ?? 0);
     const profit = revenue - costs;
 
-    return { revenue, costs, profit, isProfit: profit >= 0 };
+    return { revenue, costs, expenses, profit, isProfit: profit >= 0 };
   }
 
   async getStockEntriesReport(companyId: string, period: Period) {
@@ -236,6 +252,7 @@ export class ReportsService {
       status: entry.status,
       date: entry.date,
       total: Number(entry.total),
+      investment: entry.items.reduce((sum, item) => sum + Number(item.subtotal), 0),
       supplier: entry.supplier,
       items: entry.items.map((item) => ({
         id: item.id,
@@ -378,11 +395,16 @@ export class ReportsService {
     }),
     this.prisma.sale.findMany({
       where: { companyId, status: 'COMPLETED', createdAt: { gte: start, lte: end } },
-      select: { createdAt: true, total: true, subtotal: true },
+      select: {
+        createdAt: true,
+        total: true,
+        subtotal: true,
+        items: { select: { quantity: true, costPrice: true } },
+      },
     }),
   ]);
 
-  const [prevSalesAgg, prevEntriesAgg] = await Promise.all([
+  const [prevSalesAgg, prevEntriesAgg, previousSales] = await Promise.all([
     this.prisma.sale.aggregate({
       where: { companyId, status: 'COMPLETED', createdAt: { gte: prevStart, lte: prevEnd } },
       _sum: { total: true },
@@ -391,14 +413,20 @@ export class ReportsService {
       where: { companyId, status: 'COMPLETED', createdAt: { gte: prevStart, lte: prevEnd } },
       _sum: { total: true },
     }),
+    this.prisma.sale.findMany({
+      where: { companyId, status: 'COMPLETED', createdAt: { gte: prevStart, lte: prevEnd } },
+      select: { items: { select: { quantity: true, costPrice: true } } },
+    }),
   ]);
 
   const currentRevenue = Number(currentSalesAgg._sum.total ?? 0);
-  const currentCosts = Number(currentEntriesAgg._sum.total ?? 0);
+  const currentCosts = this.calculateCostOfGoodsSold(currentSales);
+  const currentExpenses = Number(currentEntriesAgg._sum.total ?? 0);
   const currentProfit = currentRevenue - currentCosts;
 
   const previousRevenue = Number(prevSalesAgg._sum.total ?? 0);
-  const previousCosts = Number(prevEntriesAgg._sum.total ?? 0);
+  const previousCosts = this.calculateCostOfGoodsSold(previousSales);
+  const previousExpenses = Number(prevEntriesAgg._sum.total ?? 0);
   const previousProfit = previousRevenue - previousCosts;
 
   let profitTrend: number | null = null;
@@ -431,12 +459,18 @@ export class ReportsService {
     current: {
       revenue: currentRevenue,
       costs: currentCosts,
+      expenses: currentExpenses,
       profit: currentProfit,
       isProfit: currentProfit >= 0,
       margin: Math.round(margin * 10) / 10,
       salesCount: currentSalesAgg._count,
     },
-    previous: { revenue: previousRevenue, costs: previousCosts, profit: previousProfit },
+    previous: {
+      revenue: previousRevenue,
+      costs: previousCosts,
+      expenses: previousExpenses,
+      profit: previousProfit,
+    },
     profitTrend: profitTrend !== null ? Math.round(profitTrend * 10) / 10 : null,
     chartData,
     insight,
