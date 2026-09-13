@@ -152,20 +152,6 @@ export class ReportsService {
     return this.getPeriodRange('month');
   }
 
-  private calculateCostOfGoodsSold(
-    sales: { items: { quantity: number; costPrice: any }[] }[],
-  ): number {
-    return sales.reduce(
-      (salesTotal, sale) =>
-        salesTotal +
-        sale.items.reduce(
-          (itemsTotal, item) => itemsTotal + item.quantity * Number(item.costPrice),
-          0,
-        ),
-      0,
-    );
-  }
-
   async getSalesReport(companyId: string) {
     const { start, end } = this.getCurrentMonthRange();
 
@@ -209,7 +195,7 @@ export class ReportsService {
     const [sales, entries] = await Promise.all([
       this.prisma.sale.findMany({
         where: { companyId, status: 'COMPLETED', createdAt: { gte: start, lte: end } },
-        select: { total: true, items: { select: { quantity: true, costPrice: true } } },
+        select: { total: true },
       }),
       this.prisma.stockEntry.aggregate({
         where: { companyId, status: 'COMPLETED', createdAt: { gte: start, lte: end } },
@@ -218,11 +204,10 @@ export class ReportsService {
     ]);
 
     const revenue = sales.reduce((sum, sale) => sum + Number(sale.total), 0);
-    const costs = this.calculateCostOfGoodsSold(sales);
     const expenses = Number(entries._sum.total ?? 0);
-    const profit = revenue - costs;
+    const profit = revenue - expenses;
 
-    return { revenue, costs, expenses, profit, isProfit: profit >= 0 };
+    return { revenue, expenses, profit, isProfit: profit >= 0 };
   }
 
   async getStockEntriesReport(companyId: string, period: Period) {
@@ -399,12 +384,11 @@ export class ReportsService {
         createdAt: true,
         total: true,
         subtotal: true,
-        items: { select: { quantity: true, costPrice: true } },
       },
     }),
   ]);
 
-  const [prevSalesAgg, prevEntriesAgg, previousSales] = await Promise.all([
+  const [prevSalesAgg, prevEntriesAgg] = await Promise.all([
     this.prisma.sale.aggregate({
       where: { companyId, status: 'COMPLETED', createdAt: { gte: prevStart, lte: prevEnd } },
       _sum: { total: true },
@@ -413,21 +397,15 @@ export class ReportsService {
       where: { companyId, status: 'COMPLETED', createdAt: { gte: prevStart, lte: prevEnd } },
       _sum: { total: true },
     }),
-    this.prisma.sale.findMany({
-      where: { companyId, status: 'COMPLETED', createdAt: { gte: prevStart, lte: prevEnd } },
-      select: { items: { select: { quantity: true, costPrice: true } } },
-    }),
   ]);
 
   const currentRevenue = Number(currentSalesAgg._sum.total ?? 0);
-  const currentCosts = this.calculateCostOfGoodsSold(currentSales);
   const currentExpenses = Number(currentEntriesAgg._sum.total ?? 0);
-  const currentProfit = currentRevenue - currentCosts;
+  const currentProfit = currentRevenue - currentExpenses;
 
   const previousRevenue = Number(prevSalesAgg._sum.total ?? 0);
-  const previousCosts = this.calculateCostOfGoodsSold(previousSales);
   const previousExpenses = Number(prevEntriesAgg._sum.total ?? 0);
-  const previousProfit = previousRevenue - previousCosts;
+  const previousProfit = previousRevenue - previousExpenses;
 
   let profitTrend: number | null = null;
   if (previousProfit !== 0) {
@@ -458,7 +436,6 @@ export class ReportsService {
     period,
     current: {
       revenue: currentRevenue,
-      costs: currentCosts,
       expenses: currentExpenses,
       profit: currentProfit,
       isProfit: currentProfit >= 0,
@@ -467,7 +444,6 @@ export class ReportsService {
     },
     previous: {
       revenue: previousRevenue,
-      costs: previousCosts,
       expenses: previousExpenses,
       profit: previousProfit,
     },

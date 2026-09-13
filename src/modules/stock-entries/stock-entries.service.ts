@@ -56,11 +56,29 @@ export class StockEntriesService {
         include: { items: true },
       });
 
-      // Stock augmente (increment) au lieu de diminuer
       for (const item of dto.items) {
+        const product = await tx.product.findUnique({
+          where: { id: item.productId },
+          select: { stock: true, costPrice: true },
+        });
+
+        if (!product) {
+          throw new Error(`Produit introuvable: ${item.productId}`);
+        }
+
+        const currentStockValue = product.stock * Number(product.costPrice);
+        const entryValue = item.quantity * item.unitPrice;
+        const totalStock = product.stock + item.quantity;
+        const averageCost = totalStock > 0
+          ? (currentStockValue + entryValue) / totalStock
+          : item.unitPrice;
+
         await tx.product.update({
           where: { id: item.productId },
-          data: { stock: { increment: item.quantity } },
+          data: {
+            stock: { increment: item.quantity },
+            costPrice: averageCost,
+          },
         });
       }
 
